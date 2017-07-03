@@ -1,0 +1,19 @@
+# The mode for simulation. 
+# 0: trajectory following
+# 1: 1D
+# 2: 2D
+# 9: experiment
+mode 9
+
+# The road mapfile. 
+mapfile default_map_oneroad.osm
+
+# The type of the configuration file.
+# 21: 2D, pressure force smoothing density
+# 22: 2D, viscosity force speeding up neighbors
+# 23: 2D, run for a while, block for a while, then release the block 
+# 24: 2D, record the stable field under different inflow rates
+# 13: 1D, run for a while, block for a while, then release the block 
+# 14: 1D, record the stable field under different inflow rates
+# 15: 1D, accident
+t 21

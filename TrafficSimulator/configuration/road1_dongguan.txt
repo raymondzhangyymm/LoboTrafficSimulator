@@ -1,0 +1,10 @@
+# The mode for simulation. 
+# 0: trajectory following
+# 1: 1D
+# 2: 2D
+# 9: experiment
+mode 1
+
+# The road mapfile. 
+# mapfile default_map_oneroad.osm
+mapfile map_dongguan.osm

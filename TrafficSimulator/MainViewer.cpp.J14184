@@ -1,0 +1,2218 @@
+#include "MainViewer.h"
+
+// Constructor must call the base class constructor.
+MainViewer::MainViewer(QWidget *parent) : QGLViewer(parent)
+{
+    traffic_system_p = NULL;
+
+    particle_color = zVec4(0.9, 0.8, 0.0, 0.9);
+    particle_color_ghost = zVec4(1.0, 0.0, 0.0, 0.5);
+    particle_color_selected = zVec4(1.0, 0.0, 0.0, 1.0);
+    particle_color_anchored = zVec4(0.0, 0.0, 1.0, 1.0);
+    particle_color_active = zVec4(1.0, 0.0, 1.0, 1.0);
+    particle_color_neighbor = zVec4(0.0, 0.6, 0.8, 1.0);
+
+    color_spline = zVec4(0.5, 0.5, 0.5, 1.0);
+    color_selected = zVec4(1.0, 0.0, 0.0, 1.0);
+
+    road_color = zVec4(0.2, 0.2, 1.0, 0.8);
+
+    //mesh_color = zVec4(0.0, 0.9, 0.9, 1.0);
+    mesh_color = zVec4(1.5, 1.5, 1.5, 1.0);
+    rest_shape_color = zVec4(0.8, 0.3, 0.3, 0.5);
+    realtime_color = zVec4(0.3, 0.8, 0.3, 1.0);
+
+    material_ambient[0] = 0.5;
+    material_ambient[1] = 0.5;
+    material_ambient[2] = 0.5;
+    material_ambient[3] = 1.0;
+
+    material_diffuse[0] = 0.5;
+    material_diffuse[1] = 0.5;
+    material_diffuse[2] = 0.5;
+    material_diffuse[3] = 1.0;
+
+    material_specular[0] = 0.5;
+    material_specular[1] = 0.5;
+    material_specular[2] = 0.5;
+    material_specular[3] = 1.0;
+
+    material_shininess[0] = 100.0;
+
+    part_selected = NULL;
+
+    // set the texture.
+    visual_texture.load("image_redblue.png");
+    cout << "texture = " << visual_texture.width() << "X" << visual_texture.height() << endl;
+
+    selection_mode = 0;
+
+    showBoundaryParticle = false;
+
+    QGLFormat format;
+    format.setDoubleBuffer(true);
+    format.setDepth(false);
+    format.setAlpha(false);
+    format.setSampleBuffers(true);
+    format.setSamples(16);
+    this->setFormat(format);
+
+    init();
+}
+MainViewer::~MainViewer()
+{
+}
+
+//=========================================================================
+// Functions for the main viewer.
+//=========================================================================
+//void MainViewer::initializeGL()
+void MainViewer::init()
+{
+    glCullFace(GL_BACK);
+    glEnable(GL_CULL_FACE);
+
+//    glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+
+//    glEnable(GL_LINE_SMOOTH);
+//    glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
+//    glEnable(GL_POLYGON_SMOOTH);
+//    glHint(GL_POLYGON_SMOOTH_HINT, GL_NICEST);
+
+    //glEnable(GL_COLOR_MATERIAL);
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+//    glEnable(GL_MULTISAMPLE);
+//    GLint  iMultiSample = 0;
+//    GLint  iNumSamples = 0;
+//    glGetIntegerv(GL_SAMPLE_BUFFERS, &iMultiSample);
+//    glGetIntegerv(GL_SAMPLES, &iNumSamples);
+//    cout << "Sample buffers = " << iMultiSample << ", Samples = " << iNumSamples << endl;
+
+    // set the light
+    GLfloat lightAmbient[] = {0.5, 0.5, 0.5, 1};
+    GLfloat lightDiffuse[] = {0.5, 0.5, 0.5, 1};
+    GLfloat lightPosition[] = {0.3, 0.3, 0.3, 0};
+
+    glLightfv(GL_LIGHT0, GL_AMBIENT, lightAmbient);	//Setup The Ambient Light
+    glLightfv(GL_LIGHT0, GL_DIFFUSE, lightDiffuse);	//Setup The Diffuse Light
+    glLightfv(GL_LIGHT0, GL_POSITION, lightPosition);	//Position The Light
+    glEnable(GL_LIGHT0);
+    glEnable(GL_LIGHTING);
+
+    // set up the texture.
+    GLuint texName;
+    glGenTextures(1, &texName);
+    glBindTexture(GL_TEXTURE_2D, texName);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, visual_texture.width(), visual_texture.height(),
+                 0, GL_RGBA, GL_UNSIGNED_BYTE, visual_texture.bits());
+
+    glDisable(GL_TEXTURE_2D);
+
+    glClearColor (1.0, 1.0, 1.0, 0.0);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    // disable some default shortcuts
+    setShortcut(STEREO, 0);  // default 'S'
+    setShortcut(EXIT_VIEWER, 0);  // default 'Escape'
+}
+
+void MainViewer::initDisplayObject(ParticleSystemTraffic *p_obj)
+{
+    if (!p_obj)
+    {
+        return;
+    }
+
+    traffic_system_p = p_obj;
+
+    // move the camera to see the whole road.
+    double scene_radius = (traffic_system_p->road_shape->max_x - traffic_system_p->road_shape->min_x)/2;
+    this->camera()->setSceneRadius(scene_radius);
+    this->camera()->setOrientation(0,-M_PI/6);
+    this->camera()->showEntireScene();
+
+    // save the current camera for exporting files later.
+    this->camera()->addKeyFrameToPath(1);
+
+    // the axis length determines a better visualization, set the real radius to 80%.
+    axis_length = 0.8 * scene_radius;
+
+    // set a xy plane
+    visual_xy_plane_height = 1.5*traffic_system_p->model_parameter->particleRadius;
+
+    // init the spline
+    restoreSpline();
+}
+
+void MainViewer::initFreeType()
+{
+    // init the free type library
+    FT_Library ft;
+
+    if (FT_Init_FreeType(&ft))
+    {
+        fprintf(stderr, "Could not init freetype library\n");
+        return;
+    }
+
+    // load the font
+    if (FT_New_Face(ft, "FreeSans.ttf", 0, &freetype_face))
+    {
+        fprintf(stderr, "Could not open font\n");
+        return;
+    }
+    FT_Set_Pixel_Sizes(freetype_face, 0, 48);
+
+    // load the glyphs
+    if (FT_Load_Char(freetype_face, 'X', FT_LOAD_RENDER))
+    {
+        fprintf(stderr, "Could not load character 'X'\n");
+        return;
+    }
+
+    // texture object
+    GLuint tex;
+    glActiveTexture(GL_TEXTURE1);
+    glGenTextures(1, &tex);
+    glBindTexture(GL_TEXTURE_2D, tex);
+    //glUniform1i(uniform_tex, 0);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+
+    GLuint vbo;
+    glGenBuffers(1, &vbo);
+    //glEnableVertexAttribArray(attribute_coord);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    //glVertexAttribPointer(attribute_coord, 4, GL_FLOAT, GL_FALSE, 0, 0);
+}
+
+//=========================================================================
+// Functions for interactive operations.
+//=========================================================================
+void MainViewer::mousePressEvent(QMouseEvent* e)
+{
+    if ((e->button() == Qt::LeftButton) && (e->modifiers() == Qt::ShiftModifier))
+    {
+        // record the line 'drawn' by the mouse
+        line_on_screen = QLine(e->pos(), e->pos());
+
+        select(e->pos());
+
+        if (selection_mode == 0)
+        {
+            // clear the neighbor flag of all particles
+            for (int i=0; i<traffic_system_p->num_particle; ++i)
+            {
+                Particle *p_part = traffic_system_p->particle_list[i];
+                p_part->isNeighbor = false;
+                p_part->isSelected = false;
+            }
+
+            // set the particle selected.
+            if (selectedName() != -1)
+            {
+                part_selected = traffic_system_p->particle_list.at(selectedName());
+                part_selected->isSelected = true;
+
+//                int num_neigh = part_selected->neighbours.size();
+//                for (int i=0; i<num_neigh; ++i)
+//                {
+//                    part_selected->neighbours[i]->isNeighbor = true;
+//                }
+                int num_neigh = part_selected->neighboursHalfRegion.size();
+                for (int i=0; i<num_neigh; ++i)
+                {
+                    part_selected->neighboursHalfRegion[i]->isNeighbor = true;
+                }
+
+                cout << "partID, pos, vel, acc = "
+                     << part_selected->particleID << " "
+                     << part_selected->position << " "
+                     << part_selected->velocity << " "
+                     << part_selected->acceleration << " " << endl;
+                cout << "partID, pressforce, dumping, ext = "
+                     << part_selected->particleID << " "
+                     << part_selected->pressureForce << " "
+                     << part_selected->dampingForce << " "
+                     << part_selected->external_force << " " << endl;
+            }
+
+        //        // Actual selection on the rectangular area.
+        //        // Possibly swap left/right and top/bottom to make selection_rect valid.
+        //        selection_rect = selection_rect.normalized();
+        //        // Define selection window dimensions
+        //        setSelectRegionWidth(selection_rect.width());
+        //        setSelectRegionHeight(selection_rect.height());
+        //        // Compute rectangle center and perform selection
+        //        select(selection_rect.center());
+        //        // Update display to show new selected objects
+            updateGL();
+        }
+//        else if (selection_mode == 1)
+//        {
+//            qglviewer::Vec orig, dir;
+//            camera()->convertClickToLine(e->pos(), orig, dir);
+
+//            // get the intersection pos(x,y,0) of the line and plane z=0, i.e. pos = dir * t + orig
+//            // x = dir.x * t + orig.x
+//            // y = dir.y * t + orig.y
+//            // 0 = dir.z * t + orig.z
+//            double t = (0.0 - orig.z) / dir.z;
+
+//            zVec2 new_pos = {dir.x * t + orig.x, dir.y * t + orig.y};
+
+//            if (traffic_system_p->road_shape->isInRoad(new_pos))
+//            {
+//                //traffic_system_p->updateObservationPoint(new_pos);
+//                //observation_point = traffic_system_p->observation_point;
+//            }
+//        }
+    }
+    else
+    {
+        QGLViewer::mousePressEvent(e);
+    }
+}
+
+void MainViewer::mouseMoveEvent(QMouseEvent* e)
+{
+    if ((selection_mode == 1) && (selectedName() != -1) && (e->modifiers() == Qt::ShiftModifier))
+    {
+        qglviewer::Vec orig, dir;
+        camera()->convertClickToLine(e->pos(), orig, dir);
+
+        // get the intersection pos(x,y,0) of the line and plane z=0, i.e. pos = dir * t + orig
+        // x = dir.x * t + orig.x
+        // y = dir.y * t + orig.y
+        // 0 = dir.z * t + orig.z
+        double t = (visual_xy_plane_height - orig.z) / dir.z;
+        zVec2 pos(dir.x * t + orig.x, dir.y * t + orig.y);
+
+        traffic_system_p->updateObservationPoint(selectedName(), pos);
+        updateGL();
+    }
+    else if ((selection_mode == 2) && (selectedName() != -1) && (e->modifiers() == Qt::ShiftModifier))
+    {
+        qglviewer::Vec orig, dir;
+        camera()->convertClickToLine(e->pos(), orig, dir);
+
+        // get the intersection pos(x,y,0) of the line and plane z=0, i.e. pos = dir * t + orig
+        // x = dir.x * t + orig.x
+        // y = dir.y * t + orig.y
+        // 0 = dir.z * t + orig.z
+        double t = (visual_xy_plane_height - orig.z) / dir.z;
+        zVec2 pos(dir.x * t + orig.x, dir.y * t + orig.y);
+
+        int idx_cp = selectedName();
+        int idx_road = 0;
+        for (int k=0; k < road_curve_array.size(); ++k)
+        {
+            int size = road_curve_array[k].control_point_triple.size();
+            if (idx_cp >= size)
+            {
+                idx_cp -= size;
+            }
+            else
+            {
+                idx_road = k;
+                break;
+            }
+        }
+
+        // get the road curve, i.e. the bezier
+        BezierCurve *p_road_curve = &road_curve_array[idx_road];
+
+        // determine the index of the bezier
+        int i = idx_cp / 3;
+
+        // determine which control point in the triple is manipulated
+        int j = idx_cp % 3;
+
+        if (j==0)
+        {
+            // this control point is on the bezier
+            if (i == 0)
+            {
+                // it is the first bezier
+                zVec2 p0 = p_road_curve->bezier_array[0].control_point[0];
+                p_road_curve->bezier_array[0].control_point[0] = pos;
+                p_road_curve->bezier_array[0].control_point[1] += pos - p0;
+            }
+            else if (i == p_road_curve->bezier_array.size())
+            {
+                // it is the last bezier
+                zVec2 p3 = p_road_curve->bezier_array[i-1].control_point[3];
+                p_road_curve->bezier_array[i-1].control_point[3] = pos;
+                p_road_curve->bezier_array[i-1].control_point[2] += pos - p3;
+            }
+            else
+            {
+                // it is one of the middle beziers
+                zVec2 p0 = p_road_curve->bezier_array[i].control_point[0];
+                p_road_curve->bezier_array[i].control_point[0] = pos;
+                p_road_curve->bezier_array[i-1].control_point[3] = pos;
+
+                p_road_curve->bezier_array[i].control_point[1] += pos - p0;
+                p_road_curve->bezier_array[i-1].control_point[2] += pos - p0;
+            }
+        }
+        else if (j == 1)
+        {
+            // this control point is p1 of the bezier
+            if (i == 0)
+            {
+                // it is the first bezier
+                p_road_curve->bezier_array[0].control_point[1] = pos;
+            }
+            else if (i == p_road_curve->bezier_array.size())
+            {
+                // it is the last bezier
+                p_road_curve->bezier_array[i-1].control_point[2] = pos;
+            }
+            else
+            {
+                // it is one of the middle beziers
+                p_road_curve->bezier_array[i].control_point[1] = pos;
+
+                zVec2 p3 = p_road_curve->bezier_array[i-1].control_point[3];
+                zVec2 dirc = p3 - pos;
+                zVec2 temp = p_road_curve->bezier_array[i-1].control_point[2] - p3;
+
+                p_road_curve->bezier_array[i-1].control_point[2] = p3 + dirc * (temp.length()/dirc.length());
+            }
+        }
+        else if (j == 2)
+        {
+            // this control point is p2 of the previous bezier
+            if (i == 0)
+            {
+                // it is the first bezier
+                p_road_curve->bezier_array[0].control_point[1] = pos;
+            }
+            else if (i == p_road_curve->bezier_array.size())
+            {
+                // it is the last bezier
+                p_road_curve->bezier_array[i-1].control_point[2] = pos;
+            }
+            else
+            {
+                // it is one of the middle beziers
+                p_road_curve->bezier_array[i-1].control_point[2] = pos;
+
+                zVec2 p0 = p_road_curve->bezier_array[i].control_point[0];
+                zVec2 dirc = p0 - pos;
+                zVec2 temp = p_road_curve->bezier_array[i].control_point[1] - p0;
+
+                p_road_curve->bezier_array[i].control_point[1] = p0 + dirc * (temp.length()/dirc.length());
+            }
+        }
+
+        p_road_curve->update();
+
+        updateGL();
+    }
+    else if (selection_mode == 4)
+    {
+        qglviewer::Vec orig, dir;
+        camera()->convertClickToLine(e->pos(), orig, dir);
+
+        // get the intersection pos(x,y,0) of the line and plane z=0, i.e. pos = dir * t + orig
+        // x = dir.x * t + orig.x
+        // y = dir.y * t + orig.y
+        // 0 = dir.z * t + orig.z
+        double t = (visual_xy_plane_height - orig.z) / dir.z;
+        block_point_active = {dir.x * t + orig.x, dir.y * t + orig.y};
+
+        updateGL();
+    }
+    else
+    {
+        QGLViewer::mouseMoveEvent(e);
+    }
+}
+
+void MainViewer::mouseReleaseEvent(QMouseEvent* e)
+{
+    if (e->button() == Qt::LeftButton && e->modifiers() == Qt::ShiftModifier)
+    {
+
+    }
+    else
+    {
+        QGLViewer::mouseReleaseEvent(e);
+    }
+}
+
+void MainViewer::mouseDoubleClickEvent(QMouseEvent* e)
+{
+    if (e->button() == Qt::LeftButton && selection_mode == 2)
+    {
+        qglviewer::Vec orig, dir;
+        camera()->convertClickToLine(e->pos(), orig, dir);
+
+        // get the intersection pos(x,y,0) of the line and plane z=0, i.e. pos = dir * t + orig
+        // x = dir.x * t + orig.x
+        // y = dir.y * t + orig.y
+        // 0 = dir.z * t + orig.z
+        double t = (visual_xy_plane_height - orig.z) / dir.z;
+        zVec2 pos(dir.x * t + orig.x, dir.y * t + orig.y);
+
+        if (splitBezier(pos))
+        {
+            updateGL();
+        }
+    }
+    else if (e->button() == Qt::LeftButton && selection_mode == 4)
+    {
+        qglviewer::Vec orig, dir;
+        camera()->convertClickToLine(e->pos(), orig, dir);
+
+        // get the intersection pos(x,y,0) of the line and plane z=0, i.e. pos = dir * t + orig
+        // x = dir.x * t + orig.x
+        // y = dir.y * t + orig.y
+        // 0 = dir.z * t + orig.z
+        double t = (visual_xy_plane_height - orig.z) / dir.z;
+        block_point_active = {dir.x * t + orig.x, dir.y * t + orig.y};
+
+        block_points.push_back(block_point_active);
+
+//        if (block_points.size() == 0)
+//        {
+//            // the first point must be on the side lane
+//            double min_distance = 100000;
+//            int idx_i = -1;  // the index to the curve
+//            zVec2 closest_p;
+
+//            Road *p_road = &traffic_system_p->road_shape->road_list[0];
+//            int size = p_road->side_lane_1.size();
+//            for (int i=0; i<size; ++i)
+//            {
+//                zVec2 v = p_road->side_lane_1[i] - block_point_active;
+//                double dd = v.x*v.x + v.y*v.y;
+//                if (dd < min_distance)
+//                {
+//                    min_distance = dd;
+//                    idx_i = i;
+//                    closest_p = p_road->side_lane_1[i];
+//                }
+//            }
+
+//            int offset = p_road->side_lane_1.size();
+//            size = p_road->side_lane_2.size();
+//            for (int i=0; i<size; ++i)
+//            {
+//                zVec2 v = p_road->side_lane_2[i] - block_point_active;
+//                double dd = v.x*v.x + v.y*v.y;
+//                if (dd < min_distance)
+//                {
+//                    min_distance = dd;
+//                    idx_i = offset + i;
+//                    closest_p = p_road->side_lane_2[i];
+//                }
+//            }
+
+//            if (min_distance <= 0.01)
+//            {
+//                block_points.push_back(closest_p);
+//                block_points_zoneid.push_back(idx_i);
+//                block_point_active = closest_p;
+//            }
+//        }
+//        else
+//        {
+//            // determine the road zone
+//            Road *p_road = &traffic_system_p->road_shape->road_list[0];
+//            int idx_i = -1;
+//            int size = p_road->road_zone.size();
+//            for (int i=0; i<size; ++i)
+//            {
+//                if (p_road->isInRoad(block_point_active))
+//                {
+//                    idx_i = i;
+//                    break;
+//                }
+//            }
+
+//            if (idx_i == -1)
+//            {
+//                block_points.push_back(block_point_active);
+//                block_points_zoneid.push_back(idx_i);
+//                block_point_active = block_point_active;
+//            }
+//        }
+
+        updateGL();
+    }
+    else
+    {
+        QGLViewer::mouseDoubleClickEvent(e);
+    }
+}
+
+void MainViewer::postSelection(const QPoint& point)
+{
+    // Compute orig and dir, used to draw a representation of the intersecting line
+    qglviewer::Vec orig, dir, selectedPoint;
+    camera()->convertClickToLine(point, orig, dir);
+
+    // Find the selectedPoint coordinates, using camera()->pointUnderPixel().
+    bool found;
+    selectedPoint = camera()->pointUnderPixel(point, found);
+    selectedPoint -= 0.01f*dir; // Small offset to make point clearly visible.
+    // Note that "found" is different from (selectedObjectId()>=0) because of the size of the select region.
+
+//    if (selectedName() == -1)
+//        QMessageBox::information(this, "No selection",
+//                                 "No object selected under pixel " + QString::number(point.x()) + "," + QString::number(point.y()));
+//    else
+//        QMessageBox::information(this, "Selection",
+//                                 "Particle number " + QString::number(selectedName()) + " selected under pixel " +
+//                                 QString::number(point.x()) + "," + QString::number(point.y()));
+}
+
+//============================================================================
+// Functions for Drawing.
+//============================================================================
+void MainViewer::draw()
+{
+    if (!traffic_system_p)
+    {
+        return;
+    }
+
+//    zpainter.begin(this);
+//    zpainter.beginNativePainting();
+//    drawRoadDrains();
+//    zpainter.endNativePainting();
+//    zpainter.end();
+
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    if (display_mode == 0)
+    {
+        QString str;
+        str.sprintf("#Particles:  % 5i (current)  % 8i (total)",
+                    traffic_system_p->num_particle, traffic_system_p->max_particleID);
+        drawTextOnTop(str, 16);
+
+        float sx = 2.0 / width();
+        float sy = 2.0 / height();
+
+        drawTextFreeType("The Quick Brown Fox Jumps Over The Lazy Dog",
+                         -1 + 8 * sx,   1 - 50 * sy,    sx, sy);
+        drawTextFreeType("The Misaligned Fox Jumps Over The Lazy Dog",
+                         -1 + 8.5 * sx, 1 - 100.5 * sy, sx, sy);
+
+        if (!isNearCamera())
+        //if (isNearCamera())
+        {
+            drawSideLanes();
+            drawCars();
+        }
+        else
+        {
+            if (showBoundaryParticle)
+            {
+                drawSideLanes();
+                drawParticles();
+                drawBoundaryZone();
+            }
+            else
+            {
+                if (selection_mode == 1)
+                {
+                    drawRoadDrains();
+                    drawMesh();
+                    drawObservationPoints();
+                }
+                else if (selection_mode == 2)
+                {
+                    drawSideLanes();
+                    drawBezierSpline();
+                }
+                else if (selection_mode == 4)
+                {
+                    drawSideLanes();
+                    drawBlockLine();
+                }
+                else
+                {
+                    drawRoadDrains();
+                    drawMesh();
+                }
+            }
+        }
+    }
+    else if (display_mode == 1)
+    {
+        setGridIsDrawn(true);
+
+        drawMeshVisualDensity();
+
+        QString str;
+        str.sprintf("Density:  %06.2f (ave)  %06.2f (peak)",
+                    traffic_system_p->visual_density_average, traffic_system_p->visual_density_peak);
+        drawTextOnTop(str, 12);
+
+        // determine the rectangle and draw the colormap
+        int x0 = 0, y0 = 0;
+        int x1 = 20;
+        int y1 = 80;
+        drawColormap(x0, y0, x1, y1);
+
+        // Draw the colormap description
+//        qf.setBold(false);
+//        str.sprintf("%02.0f", traffic_system_p->max_visual_density);
+//        glColor4f(0, 0, 0, 1);
+//        drawText(x1+2, height()-y1+10, str, qf);
+
+//        str.sprintf("%02.0f", 0);
+//        drawText(x1+2, height(), str, qf);
+
+        drawAxis(sceneRadius(), "Density");
+    }
+    else if (display_mode == 2)
+    {
+        setGridIsDrawn(true);
+
+        drawMeshVisualVelocity();
+
+        QString str;
+        str.sprintf("Velocity:  %06.2f (ave)  %06.2f (peak)",
+                    traffic_system_p->visual_velocity_average, traffic_system_p->visual_velocity_peak);
+        drawTextOnTop(str, 12);
+
+        // determine the rectangle and draw the colormap
+        int x0 = 0, y0 = 0;
+        int x1 = 20;
+        int y1 = 80;
+        drawColormap(x0, y0, x1, y1);
+
+        // Draw the colormap description
+//        qf.setBold(false);
+//        str.sprintf("%02.0f", traffic_system_p->max_visual_velocity);
+//        glColor4f(0, 0, 0, 1);
+//        drawText(x1+2, height()-y1+10, str, qf);
+
+//        str.sprintf("%02.0f", 0);
+//        drawText(x1+2, height(), str, qf);
+
+        drawAxis(sceneRadius(), "Velocity");
+    }
+}
+
+void MainViewer::drawWithNames()
+{
+    if (!traffic_system_p)
+    {
+        return;
+    }
+
+    if (selection_mode == 0)
+    {
+        // the particles
+        int size = traffic_system_p->particle_list.size();
+        for (int i=0; i<size; ++i)
+        {
+            Particle* p_particle = traffic_system_p->particle_list[i];
+
+            glPushName(i);
+            drawOneParticle(p_particle, particle_color);
+            glPopName();
+        }
+    }
+    else if (selection_mode == 1)
+    {
+        int num_observation = traffic_system_p->observation_list.size();
+        int num_color = observation_color_list_p->size();
+        if (num_observation > num_color+1)
+        {
+            num_observation = num_color+1;
+        }
+
+        for (int i=1; i<num_observation; ++i)
+        {
+            VisualParticle *p_vpart = &traffic_system_p->observation_list[i];
+            zVec2 pos = p_vpart->position;
+
+            glPushName(i);
+            drawOneObservationPoint(pos, observation_color_list_p->at(i-1));
+            glPopName();
+        }
+    }
+    else if (selection_mode == 2)
+    {
+        // the control points of all roads
+        int count = 0;
+        int size = road_curve_array.size();
+        for (int i=0; i<size; ++i)
+        {
+            // get the road curve
+            BezierCurve *p_road_curve = &road_curve_array[i];
+
+            // get the control point array
+            vector<zVec2>* p_control_point = &(p_road_curve->control_point_triple);
+            int size_point = p_control_point->size();
+
+            // draw the control points
+            int dummy_idx_1 = 2, dummy_idx_2 = size_point - 2;
+            for (int k=0; k<size_point; ++k)
+            {
+                // skip the dummy points
+                if (k != dummy_idx_1 && k != dummy_idx_2)
+                {
+                    glPushName(count);
+                    drawOneQuad(p_control_point->at(k), particle_color);
+                    glPopName();
+                }
+                count++;
+            }
+        }
+    }
+}
+
+void MainViewer::drawAxis(double len, const char* str)
+{
+    // the arrows
+    zVec3 p0(0, 0, 0);
+    zVec3 p1(len, 0, 0);
+    zVec4 color(1,0,1,1);
+    double radius = 0.06;
+    drawArrowFrom(p0,p1,radius,color);
+
+    p1.x = 0;
+    p1.y = len;
+    p1.z = 0;
+    drawArrowFrom(p0,p1,radius,color);
+
+    p1.x = 0;
+    p1.y = 0;
+    p1.z = len;
+    drawArrowFrom(p0,p1,radius,color);
+
+    // the labels of the axes.
+    glDisable(GL_LIGHTING);
+
+    QPainterPath path;
+    path.addText(QPointF(0, 0), QFont("Arial", 4), QString("X"));
+    QList<QPolygonF> poly = path.toSubpathPolygons();
+    double cx = path.boundingRect().center().x();
+    double cy = path.boundingRect().center().y();
+    for (QList<QPolygonF>::iterator i = poly.begin(); i != poly.end(); i++){
+        glBegin(GL_LINE_LOOP);
+        for (QPolygonF::iterator p = (*i).begin(); p != i->end(); p++)
+            glVertex3f(len*1.02, (p->rx()-cx)*0.1f, (-p->ry()+cy)*0.1f);
+        glEnd();
+    }
+
+    path = QPainterPath();
+    path.addText(QPointF(0, 0), QFont("Arial", 4), QString("Y"));
+    poly = path.toSubpathPolygons();
+    cx = path.boundingRect().center().x();
+    cy = path.boundingRect().center().y();
+    for (QList<QPolygonF>::iterator i = poly.begin(); i != poly.end(); i++){
+        glBegin(GL_LINE_LOOP);
+        for (QPolygonF::iterator p = (*i).begin(); p != i->end(); p++)
+            glVertex3f((p->rx()-cx)*0.1f, len*1.02, (-p->ry()+cy)*0.1f);
+        glEnd();
+    }
+
+    path = QPainterPath();
+    path.addText(QPointF(0, 0), QFont("Arial", 4), QString(str));
+    poly = path.toSubpathPolygons();
+    //poly = path.toFillPolygons();
+    cx = path.boundingRect().center().x();
+    cy = path.boundingRect().center().y();
+    for (QList<QPolygonF>::iterator i = poly.begin(); i != poly.end(); i++){
+        glBegin(GL_LINE_LOOP);
+        for (QPolygonF::iterator p = (*i).begin(); p != i->end(); p++)
+            glVertex3f((p->rx()-cx)*0.1f, (-p->ry()+cy)*0.1f, len*1.02);
+        glEnd();
+    }
+
+    glEnable(GL_LIGHTING);
+}
+
+void MainViewer::drawTextOnTop(const QString &str, int size)
+{
+    // the labels of the axes.
+    glDisable(GL_LIGHTING);
+
+    // draw the rectangle with the texture
+    startScreenCoordinatesSystem(true);
+
+    QPainterPath path;
+    path.addText(QPointF(0, 0), QFont("Arial", size), str);
+    QList<QPolygonF> poly = path.toSubpathPolygons();
+//    QList<QPolygonF> poly = path.toFillPolygons();
+
+    int xx = 10, yy = height() - 30;
+
+    glColor4f(0,0,0,1);
+    glLineWidth(1.3);
+    for (QList<QPolygonF>::iterator i = poly.begin(); i != poly.end(); i++){
+        glBegin(GL_LINE_LOOP);
+        //glBegin(GL_POLYGON);
+        for (QPolygonF::iterator p = (*i).begin(); p != i->end(); p++)
+            glVertex2f(p->rx()+xx, -p->ry()+yy);
+        glEnd();
+    }
+
+    stopScreenCoordinatesSystem();
+
+    glEnable(GL_LIGHTING);
+}
+
+void MainViewer::drawTextFreeType(const char *text, float x, float y, float sx, float sy)
+{
+    // the labels of the axes.
+    glDisable(GL_LIGHTING);
+    glEnable(GL_TEXTURE_2D);
+
+    // draw the rectangle with the texture
+    startScreenCoordinatesSystem(true);
+
+    FT_GlyphSlot freetype_face_glyph = freetype_face->glyph;
+
+    for(const char *p = text; *p; p++)
+    {
+        if(FT_Load_Char(freetype_face, *p, FT_LOAD_RENDER))
+        {
+            continue;
+        }
+
+        glTexImage2D(GL_TEXTURE_2D, 1, GL_RED,
+                    freetype_face_glyph->bitmap.width,
+                    freetype_face_glyph->bitmap.rows,
+                    0, GL_RED, GL_UNSIGNED_BYTE,
+                    freetype_face_glyph->bitmap.buffer
+                    );
+
+        float x2 = x + freetype_face_glyph->bitmap_left * sx;
+        float y2 = -y - freetype_face_glyph->bitmap_top * sy;
+        float w = freetype_face_glyph->bitmap.width * sx;
+        float h = freetype_face_glyph->bitmap.rows * sy;
+
+//        GLfloat box[4][4] = {
+//            {x2,     -y2    , 0, 0},
+//            {x2 + w, -y2    , 1, 0},
+//            {x2,     -y2 - h, 0, 1},
+//            {x2 + w, -y2 - h, 1, 1},
+//        };
+
+//        glBufferData(GL_ARRAY_BUFFER, sizeof box, box, GL_DYNAMIC_DRAW);
+//        glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+
+        glColor4f(1,1,1,1);
+        glNormal3f(0.0, 0.0, 1.0);
+        glBegin(GL_QUADS);
+        glTexCoord2f(0.0, 0.0);
+        glVertex2i(x2, -y2);
+        glTexCoord2f(1.0, 0.0);
+        glVertex2i(x2+w, -y2);
+        glTexCoord2f(0.0, 1.0);
+        glVertex2i(x2, -y2-h);
+        glTexCoord2f(1.0, 1.0);
+        glVertex2i(x2+w, -y2-h);
+        glEnd();
+
+        x += (freetype_face_glyph->advance.x/64) * sx;
+        y += (freetype_face_glyph->advance.y/64) * sy;
+    }
+
+    stopScreenCoordinatesSystem();
+
+    glDisable(GL_TEXTURE_2D);
+    glEnable(GL_LIGHTING);
+}
+
+void MainViewer::drawColormap(int x0, int y0, int x1, int y1)
+{
+    glDisable(GL_LIGHTING);
+    glEnable(GL_TEXTURE_2D);
+    glTexEnvf(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_BLEND);
+
+    // draw the rectangle with the texture
+    startScreenCoordinatesSystem(true);
+
+    glColor4f(1,1,1,1);
+    glNormal3f(0.0, 0.0, 1.0);
+    glBegin(GL_QUADS);
+    glTexCoord2f(0.0, 0.0);
+    glVertex2i(x0, y0);
+    glTexCoord2f(1.0, 0.0);
+    glVertex2i(x1, y0);
+    glTexCoord2f(1.0, 1.0);
+    glVertex2i(x1, y1);
+    glTexCoord2f(0.0, 1.0);
+    glVertex2i(x0, y1);
+    glEnd();
+
+    stopScreenCoordinatesSystem();
+
+    // Depth clear is not absolutely needed. An other option would have been to draw the
+    // QUAD with a 0.999 z value (z ranges in [0, 1[ with startScreenCoordinatesSystem()).
+    //glClear(GL_DEPTH_BUFFER_BIT);
+    glDisable(GL_TEXTURE_2D);
+    glEnable(GL_LIGHTING);
+}
+
+void MainViewer::drawObservationPoints()
+{
+    int num_observation = traffic_system_p->observation_list.size();
+    int num_color = observation_color_list_p->size();
+    if (num_observation > num_color+1)
+    {
+        num_observation = num_color+1;
+    }
+
+    for (int i=1; i<num_observation; ++i)
+    {
+        VisualParticle *p_vpart = &traffic_system_p->observation_list[i];
+        zVec2 pos = p_vpart->position;
+
+        drawOneObservationPoint(pos, observation_color_list_p->at(i-1));
+    }
+}
+
+void MainViewer::drawOneObservationPoint(zVec2 pos, zVec4 color_)
+{
+    zVec3 p0(pos.x, pos.y, visual_xy_plane_height*10.0);
+    zVec3 p1(pos.x, pos.y, visual_xy_plane_height);
+    zVec4 color = {color_.x,color_.y,color_.z,color_.a};
+
+    double radius = traffic_system_p->model_parameter->particleRadius;
+    drawArrowFrom(p0,p1,radius,color);
+}
+
+void MainViewer::drawOneParticle(Particle* p_particle, zVec4 color)
+{
+    // Set lighting materials
+    glMaterialfv(GL_FRONT, GL_AMBIENT, material_ambient);
+    glMaterialfv(GL_FRONT, GL_DIFFUSE, material_diffuse);
+    glMaterialfv(GL_FRONT, GL_SPECULAR, material_specular);
+    glMaterialfv(GL_FRONT, GL_SHININESS, material_shininess);
+
+    // Set color
+    glColor4f(color.x, color.y, color.z, color.a);
+
+    glPushMatrix();
+    glTranslatef(p_particle->position[0], p_particle->position[1], 0.0);
+
+    // Drawing particle
+    //glutSolidSphere(sphereRadius, 12, 12);
+    GLUquadricObj *quadObj;
+    quadObj = gluNewQuadric ();
+    gluSphere(quadObj, p_particle->sphereRadius, 16, 16);
+
+    glPopMatrix();
+}
+
+void MainViewer::drawSphere(zVec3 pos, zVec4 color)
+{
+    // Setting Lighting materials
+    glMaterialfv(GL_FRONT, GL_AMBIENT, material_ambient);
+    glMaterialfv(GL_FRONT, GL_DIFFUSE, material_diffuse);
+    glMaterialfv(GL_FRONT, GL_SPECULAR, material_specular);
+    glMaterialfv(GL_FRONT, GL_SHININESS, material_shininess);
+
+    glColor4f(color.x, color.y, color.z, color.a);
+    glBegin(GL_TRIANGLES);
+    int num_face = traffic_system_p->sphere_mesh.triangle_list.size();
+    for (int i=0; i<num_face; ++i)
+    {
+        Triangle *p_tri = &traffic_system_p->sphere_mesh.triangle_list[i];
+
+        zVec3 n0 = p_tri->v0->position + pos;
+        zVec3 n1 = p_tri->v1->position + pos;
+        zVec3 n2 = p_tri->v2->position + pos;
+
+        //glNormal3f(p_tri->norm.x, p_tri->norm.y, p_tri->norm.z);
+        glNormal3f(p_tri->v0->norm.x, p_tri->v0->norm.y, p_tri->v0->norm.z);
+        glVertex3f(n0.x, n0.y, n0.z);
+        glNormal3f(p_tri->v1->norm.x, p_tri->v1->norm.y, p_tri->v1->norm.z);
+        glVertex3f(n1.x, n1.y, n1.z);
+        glNormal3f(p_tri->v2->norm.x, p_tri->v2->norm.y, p_tri->v2->norm.z);
+        glVertex3f(n2.x, n2.y, n2.z);
+    }
+    glEnd();
+}
+
+void MainViewer::drawParticles()
+{
+    int size = traffic_system_p->particle_list.size();
+    for (int i=0; i<size; ++i)
+    {
+        Particle* p_particle = traffic_system_p->particle_list[i];
+
+        // Choose the color for the particle.
+        zVec4 color;
+        if (p_particle->isSelected)
+        {
+            color = particle_color_selected;
+        }
+        else if (p_particle->isAnchored)
+        {
+            color = particle_color_anchored;
+        }
+        else if (p_particle->isActive)
+        {
+            color = particle_color_active;
+        }
+        else if (p_particle->isNeighbor)
+        {
+            color = particle_color_neighbor;
+        }
+        else if (!p_particle->isInRoad)
+        {
+            color = particle_color_ghost;
+        }
+        else
+        {
+            color = particle_color;
+        }
+
+        if (!showBoundaryParticle && !p_particle->isInRoad)
+        {
+            continue;
+        }
+        else
+        {
+            //drawOneParticle(p_particle, color);
+            zVec3 pos = {p_particle->position.x, p_particle->position.y, 0};
+            drawSphere(pos, color);
+        }
+    }
+
+    // draw arrow of the active particle
+//    if (part_selected && part_selected->isActive)
+//    {
+//        glm::vec3 p0(0,0,0), p1(0,0,0);
+//        p0.x = part_selected->position.x;
+//        p0.y = part_selected->position.y;
+
+//        double len = 5 * part_selected->external_force.length();
+//        p1.x = p0.x + part_selected->external_force.x / len;
+//        p1.y = p0.y + part_selected->external_force.y / len;
+
+//        //drawArrowFrom(p0, p1);
+//    }
+}
+
+void MainViewer::drawMesh()
+{
+//    glShadeModel(GL_FLAT);
+//    glDisable(GL_LIGHTING);
+
+    // Setting Lighting materials
+    glMaterialfv(GL_FRONT, GL_AMBIENT, material_ambient);
+    glMaterialfv(GL_FRONT, GL_DIFFUSE, material_diffuse);
+    glMaterialfv(GL_FRONT, GL_SPECULAR, material_specular);
+    glMaterialfv(GL_FRONT, GL_SHININESS, material_shininess);
+
+    glColor4f(0.0, 0.7, 0.7, 0.6);
+    glBegin(GL_TRIANGLES);
+    int num_face = traffic_system_p->face_list.size();
+    for (int i=0; i<num_face; ++i)
+    {
+        TriangleFace* f = traffic_system_p->face_list[i];
+        zVec3 n0, n1, n2;
+
+        n0[0] = f->parti_0->position.x;
+        n0[1] = f->parti_0->position.y;
+        n0[2] = f->parti_0->visual_density_normalized;
+
+        n1[0] = f->parti_1->position.x;
+        n1[1] = f->parti_1->position.y;
+        n1[2] = f->parti_1->visual_density_normalized;
+
+        n2[0] = f->parti_2->position.x;
+        n2[1] = f->parti_2->position.y;
+        n2[2] = f->parti_2->visual_density_normalized;
+
+        VisualParticle *p_vpart;
+        zVec3 norm;
+
+        // one side of the triangle
+        p_vpart = traffic_system_p->visual_particle_list[f->parti_0->particleID];
+        norm = p_vpart->norm_visual_density;
+        glNormal3f(norm.x, norm.y, norm.z);
+        glVertex3f(n0.x, n0.y, n0.z * axis_length * 0.4);
+
+        p_vpart = traffic_system_p->visual_particle_list[f->parti_1->particleID];
+        norm = p_vpart->norm_visual_density;
+        glNormal3f(norm.x, norm.y, norm.z);
+        glVertex3f(n1.x, n1.y, n1.z * axis_length* 0.4);
+
+        p_vpart = traffic_system_p->visual_particle_list[f->parti_2->particleID];
+        norm = p_vpart->norm_visual_density;
+        glNormal3f(norm.x, norm.y, norm.z);
+        glVertex3f(n2.x, n2.y, n2.z * axis_length* 0.4);
+
+        // the other side of the triangle
+        p_vpart = traffic_system_p->visual_particle_list[f->parti_0->particleID];
+        norm = - p_vpart->norm_visual_density;
+        glNormal3f(norm.x, norm.y, norm.z);
+        glVertex3f(n0.x, n0.y, n0.z * axis_length* 0.4);
+
+        p_vpart = traffic_system_p->visual_particle_list[f->parti_2->particleID];
+        norm = - p_vpart->norm_visual_density;
+        glNormal3f(norm.x, norm.y, norm.z);
+        glVertex3f(n2.x, n2.y, n2.z * axis_length* 0.4);
+
+        p_vpart = traffic_system_p->visual_particle_list[f->parti_1->particleID];
+        norm = - p_vpart->norm_visual_density;
+        glNormal3f(norm.x, norm.y, norm.z);
+        glVertex3f(n1.x, n1.y, n1.z * axis_length* 0.4);
+    }
+    glEnd();
+
+//    glEnable(GL_LIGHTING);
+//    glShadeModel(GL_SMOOTH);
+}
+
+void MainViewer::drawMeshVisualVelocity()
+{
+    glEnable(GL_TEXTURE_2D);
+    //glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL);
+    glTexEnvf(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_BLEND);
+
+    // Setting Lighting materials
+    glMaterialfv(GL_FRONT, GL_AMBIENT, material_ambient);
+    glMaterialfv(GL_FRONT, GL_DIFFUSE, material_diffuse);
+    glMaterialfv(GL_FRONT, GL_SPECULAR, material_specular);
+    glMaterialfv(GL_FRONT, GL_SHININESS, material_shininess);
+
+    glColor4f(mesh_color.x, mesh_color.y, mesh_color.z, mesh_color.a);
+
+    glBegin(GL_TRIANGLES);
+    int num_face = traffic_system_p->face_list.size();
+    for (int i=0; i<num_face; ++i)
+    {
+        TriangleFace* f = traffic_system_p->face_list[i];
+
+        zVec3 n0, n1, n2;
+
+        n0[0] = f->parti_0->position.x;
+        n0[1] = f->parti_0->position.y;
+        n0[2] = f->parti_0->visual_velocity_normalized;
+
+        n1[0] = f->parti_1->position.x;
+        n1[1] = f->parti_1->position.y;
+        n1[2] = f->parti_1->visual_velocity_normalized;
+
+        n2[0] = f->parti_2->position.x;
+        n2[1] = f->parti_2->position.y;
+        n2[2] = f->parti_2->visual_velocity_normalized;
+
+        VisualParticle *p_vpart;
+        zVec3 norm;
+
+        // one side of the triangle
+        p_vpart = traffic_system_p->visual_particle_list[f->parti_0->particleID];
+        norm = p_vpart->norm_visual_velocity;
+        glNormal3f(norm.x, norm.y, norm.z);
+        glTexCoord2f(0.5, n0.z);
+        glVertex3f(n0.x, n0.y, n0.z* axis_length);
+
+        p_vpart = traffic_system_p->visual_particle_list[f->parti_1->particleID];
+        norm = p_vpart->norm_visual_velocity;
+        glNormal3f(norm.x, norm.y, norm.z);
+        glTexCoord2f(0.5, n1.z);
+        glVertex3f(n1.x, n1.y, n1.z* axis_length);
+
+        p_vpart = traffic_system_p->visual_particle_list[f->parti_2->particleID];
+        norm = p_vpart->norm_visual_velocity;
+        glNormal3f(norm.x, norm.y, norm.z);
+        glTexCoord2f(0.5, n2.z);
+        glVertex3f(n2.x, n2.y, n2.z* axis_length);
+
+        // the other side of the triangle
+        p_vpart = traffic_system_p->visual_particle_list[f->parti_0->particleID];
+        norm = p_vpart->norm_visual_velocity * (-1);
+        glNormal3f(norm.x, norm.y, norm.z);
+        glTexCoord2f(0.5, n0.z);
+        glVertex3f(n0.x, n0.y, n0.z* axis_length);
+
+        p_vpart = traffic_system_p->visual_particle_list[f->parti_2->particleID];
+        norm = p_vpart->norm_visual_velocity * (-1);
+        glNormal3f(norm.x, norm.y, norm.z);
+        glTexCoord2f(0.5, n2.z);
+        glVertex3f(n2.x, n2.y, n2.z* axis_length);
+
+        p_vpart = traffic_system_p->visual_particle_list[f->parti_1->particleID];
+        norm = p_vpart->norm_visual_velocity * (-1);
+        glNormal3f(norm.x, norm.y, norm.z);
+        glTexCoord2f(0.5, n1.z);
+        glVertex3f(n1.x, n1.y, n1.z* axis_length);
+
+    }
+    glEnd();
+
+    glDisable(GL_TEXTURE_2D);
+
+    //----------------------------------------------------------------------------
+    // For the rest shape
+    //----------------------------------------------------------------------------
+    glColor4f(rest_shape_color.x, rest_shape_color.y,
+              rest_shape_color.z,rest_shape_color.a);
+
+    glBegin(GL_TRIANGLES);
+    for (int i=0; i<num_face; ++i)
+    {
+        TriangleFace* f = traffic_system_p->face_list[i];
+
+        GLfloat n0[3], n1[3], n2[3];
+
+        n0[0] = f->parti_0->position.x;
+        n0[1] = f->parti_0->position.y;
+        n0[2] = 0;
+
+        n1[0] = f->parti_1->position.x;
+        n1[1] = f->parti_1->position.y;
+        n1[2] = 0;
+
+        n2[0] = f->parti_2->position.x;
+        n2[1] = f->parti_2->position.y;
+        n2[2] = 0;
+
+        glVertex3fv(n0);
+        glVertex3fv(n1);
+        glVertex3fv(n2);
+
+        glVertex3fv(n0);
+        glVertex3fv(n2);
+        glVertex3fv(n1);
+    }
+    glEnd();
+}
+
+void MainViewer::drawMeshVisualDensity()
+{
+    glEnable(GL_TEXTURE_2D);
+    //glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_DECAL);
+    //glTexEnvf(GL_TEXTURE_ENV, GL_TEXTURE_ENV_MODE, GL_MODULATE);
+    glTexEnvf(GL_TEXTURE_ENV, GL_COMBINE_RGB, GL_BLEND);
+
+    // Setting Lighting materials
+    glMaterialfv(GL_FRONT, GL_AMBIENT, material_ambient);
+    glMaterialfv(GL_FRONT, GL_DIFFUSE, material_diffuse);
+    glMaterialfv(GL_FRONT, GL_SPECULAR, material_specular);
+    glMaterialfv(GL_FRONT, GL_SHININESS, material_shininess);
+
+    glColor4f(mesh_color.x, mesh_color.y, mesh_color.z, mesh_color.a);
+
+    glBegin(GL_TRIANGLES);
+    int num_face = traffic_system_p->face_list.size();
+    for (int i=0; i<num_face; ++i)
+    {
+        TriangleFace* f = traffic_system_p->face_list[i];
+        zVec3 n0, n1, n2;
+
+        n0[0] = f->parti_0->position.x;
+        n0[1] = f->parti_0->position.y;
+        n0[2] = f->parti_0->visual_density_normalized;
+
+        n1[0] = f->parti_1->position.x;
+        n1[1] = f->parti_1->position.y;
+        n1[2] = f->parti_1->visual_density_normalized;
+
+        n2[0] = f->parti_2->position.x;
+        n2[1] = f->parti_2->position.y;
+        n2[2] = f->parti_2->visual_density_normalized;
+
+        VisualParticle *p_vpart;
+        zVec3 norm;
+
+        // one side of the triangle
+        p_vpart = traffic_system_p->visual_particle_list[f->parti_0->particleID];
+        norm = p_vpart->norm_visual_density;
+        glNormal3f(norm.x, norm.y, norm.z);
+        glTexCoord2f(0.5, n0.z);
+        glVertex3f(n0.x, n0.y, n0.z * axis_length);
+
+        p_vpart = traffic_system_p->visual_particle_list[f->parti_1->particleID];
+        norm = p_vpart->norm_visual_density;
+        glNormal3f(norm.x, norm.y, norm.z);
+        glTexCoord2f(0.5, n1.z);
+        glVertex3f(n1.x, n1.y, n1.z * axis_length);
+
+        p_vpart = traffic_system_p->visual_particle_list[f->parti_2->particleID];
+        norm = p_vpart->norm_visual_density;
+        glNormal3f(norm.x, norm.y, norm.z);
+        glTexCoord2f(0.5, n2.z);
+        glVertex3f(n2.x, n2.y, n2.z * axis_length);
+
+        // the other side of the triangle
+        p_vpart = traffic_system_p->visual_particle_list[f->parti_0->particleID];
+        norm = - p_vpart->norm_visual_density;
+        glNormal3f(norm.x, norm.y, norm.z);
+        glTexCoord2f(0.5, n0.z);
+        glVertex3f(n0.x, n0.y, n0.z * axis_length);
+
+        p_vpart = traffic_system_p->visual_particle_list[f->parti_2->particleID];
+        norm = - p_vpart->norm_visual_density;
+        glNormal3f(norm.x, norm.y, norm.z);
+        glTexCoord2f(0.5, n2.z);
+        glVertex3f(n2.x, n2.y, n2.z * axis_length);
+
+        p_vpart = traffic_system_p->visual_particle_list[f->parti_1->particleID];
+        norm = - p_vpart->norm_visual_density;
+        glNormal3f(norm.x, norm.y, norm.z);
+        glTexCoord2f(0.5, n1.z);
+        glVertex3f(n1.x, n1.y, n1.z * axis_length);
+    }
+
+    glEnd();
+
+    glDisable(GL_TEXTURE_2D);
+
+    //----------------------------------------------------------------------------
+    // For the rest shape
+    //----------------------------------------------------------------------------
+    glColor4f(rest_shape_color.x, rest_shape_color.y,
+              rest_shape_color.z,rest_shape_color.a);
+
+    double rest_density_height = traffic_system_p->model_parameter->restDensity /
+                                 traffic_system_p->max_visual_density * axis_length;
+    glBegin(GL_TRIANGLES);
+    for (int i=0; i<num_face; ++i)
+    {
+        TriangleFace* f = traffic_system_p->face_list[i];
+
+        GLfloat n0[3], n1[3], n2[3];
+
+        n0[0] = f->parti_0->position.x;
+        n0[1] = f->parti_0->position.y;
+        n0[2] = rest_density_height;
+
+        n1[0] = f->parti_1->position.x;
+        n1[1] = f->parti_1->position.y;
+        n1[2] = rest_density_height;
+
+        n2[0] = f->parti_2->position.x;
+        n2[1] = f->parti_2->position.y;
+        n2[2] = rest_density_height;
+
+        glVertex3fv(n0);
+        glVertex3fv(n1);
+        glVertex3fv(n2);
+
+        glVertex3fv(n0);
+        glVertex3fv(n2);
+        glVertex3fv(n1);
+    }
+    glEnd();
+}
+
+void MainViewer::drawBar(GLfloat bar_verts[8][3], zVec4 color)
+{
+    if (!traffic_system_p)
+    {
+        return;
+    }
+
+    glColor4f(color[0], color[1], color[2], color[3]);
+
+    // Setting Lighting materials
+//    glMaterialfv(GL_FRONT, GL_AMBIENT, material_ambient);
+//    glMaterialfv(GL_FRONT, GL_DIFFUSE, material_diffuse);
+//    glMaterialfv(GL_FRONT, GL_SPECULAR, material_specular);
+//    glMaterialfv(GL_FRONT, GL_SHININESS, material_shininess);
+
+    glBegin(GL_QUADS);
+    glVertex3fv(bar_verts[0]);
+    glVertex3fv(bar_verts[3]);
+    glVertex3fv(bar_verts[2]);
+    glVertex3fv(bar_verts[1]);
+    glEnd();
+
+    glBegin(GL_QUADS);
+    glVertex3fv(bar_verts[0]);
+    glVertex3fv(bar_verts[1]);
+    glVertex3fv(bar_verts[5]);
+    glVertex3fv(bar_verts[4]);
+    glEnd();
+
+    glBegin(GL_QUADS);
+    glVertex3fv(bar_verts[0]);
+    glVertex3fv(bar_verts[4]);
+    glVertex3fv(bar_verts[7]);
+    glVertex3fv(bar_verts[3]);
+    glEnd();
+
+    glBegin(GL_QUADS);
+    glVertex3fv(bar_verts[7]);
+    glVertex3fv(bar_verts[6]);
+    glVertex3fv(bar_verts[2]);
+    glVertex3fv(bar_verts[3]);
+    glEnd();
+
+    glBegin(GL_QUADS);
+    glVertex3fv(bar_verts[6]);
+    glVertex3fv(bar_verts[5]);
+    glVertex3fv(bar_verts[1]);
+    glVertex3fv(bar_verts[2]);
+    glEnd();
+
+    glBegin(GL_QUADS);
+    glVertex3fv(bar_verts[4]);
+    glVertex3fv(bar_verts[5]);
+    glVertex3fv(bar_verts[6]);
+    glVertex3fv(bar_verts[7]);
+    glEnd();
+}
+
+void MainViewer::drawSideLanes()
+{
+    int size = traffic_system_p->road_shape->road_list.size();
+    for (int i=0; i<size; ++i)
+    {
+        Road *p_road = &traffic_system_p->road_shape->road_list[i];
+        drawOneSideLane(p_road->side_lane_1, road_color);
+        drawOneSideLane(p_road->side_lane_2, road_color);
+    }
+}
+
+void MainViewer::drawOneSideLane(vector<zVec2> &cl, zVec4 color)
+{
+    glColor4f(color[0],color[1],color[2],color[3]);
+
+    int size = cl.size();
+    for (int i=1; i<size; ++i)
+    {
+        GLdouble x1 = cl[i-1][0];
+        GLdouble y1 = cl[i-1][1];
+        GLdouble z1 = 0;
+        GLdouble x2 = cl[i][0];
+        GLdouble y2 = cl[i][1];
+        GLdouble z2 = 0;
+        GLdouble D  = 0.01;  // radius of the cylinder
+
+        double x=x2-x1;
+        double y=y2-y1;
+        double z=z2-z1;
+        double L=sqrt(x*x+y*y+z*z);  // length of the cylinder
+        //cout << "x1,y1,L=" << x1 << " " << y1 << " " << L << endl;
+        //cout << "x2,y2,L=" << x2 << " " << y2 << " " << L << endl;
+
+        glPushMatrix();
+
+        // translation
+        glTranslated(x1,y1,z1);
+
+        // rotation
+        double RADPERDEG = 0.0174533;
+        glRotated(atan2(y,x)/RADPERDEG, 0., 0., 1.);
+        //glRotated(atan2(sqrt(x*x+y*y),z)/RADPERDEG, 0., 1., 0.);
+        glRotated(90, 0., 1., 0.);
+
+        // draw original cylinder along z-axis from 0 to L
+        GLUquadricObj *quadObj = gluNewQuadric ();
+        gluQuadricDrawStyle (quadObj, GLU_FILL);
+        gluQuadricNormals (quadObj, GLU_SMOOTH);
+        gluCylinder(quadObj, D, D, L, 16, 1);
+        gluDeleteQuadric(quadObj);
+
+        glPopMatrix();
+    }
+}
+
+void MainViewer::drawRoadDrains()
+{
+//    glEnable (GL_BLEND);
+//    glDisable (GL_DEPTH_TEST);
+
+    // Setting Lighting materials
+    glMaterialfv(GL_FRONT, GL_AMBIENT, material_ambient);
+    glMaterialfv(GL_FRONT, GL_DIFFUSE, material_diffuse);
+    glMaterialfv(GL_FRONT, GL_SPECULAR, material_specular);
+    glMaterialfv(GL_FRONT, GL_SHININESS, material_shininess);
+
+    glColor4f(0, 0, 1, 0.5);
+
+    glBegin(GL_TRIANGLES);
+    Road *p_road = &traffic_system_p->road_shape->road_list[0];
+    int num_face = p_road->drain_1.triangle_list.size();
+    for (int i=0; i<num_face; ++i)
+    {
+        Triangle* p_tri = &p_road->drain_1.triangle_list[i];
+
+        // one side of the triangle
+        glNormal3f(p_tri->v0->norm.x, p_tri->v0->norm.y, p_tri->v0->norm.z);
+        glVertex3f(p_tri->v0->position.x, p_tri->v0->position.y, p_tri->v0->position.z);
+
+        glNormal3f(p_tri->v1->norm.x, p_tri->v1->norm.y, p_tri->v1->norm.z);
+        glVertex3f(p_tri->v1->position.x, p_tri->v1->position.y, p_tri->v1->position.z);
+
+        glNormal3f(p_tri->v2->norm.x, p_tri->v2->norm.y, p_tri->v2->norm.z);
+        glVertex3f(p_tri->v2->position.x, p_tri->v2->position.y, p_tri->v2->position.z);
+    }
+
+    num_face = p_road->drain_2.triangle_list.size();
+    for (int i=0; i<num_face; ++i)
+    {
+        Triangle* p_tri = &p_road->drain_2.triangle_list[i];
+
+        // one side of the triangle
+        glNormal3f(p_tri->v0->norm.x, p_tri->v0->norm.y, p_tri->v0->norm.z);
+        glVertex3f(p_tri->v0->position.x, p_tri->v0->position.y, p_tri->v0->position.z);
+
+        glNormal3f(p_tri->v1->norm.x, p_tri->v1->norm.y, p_tri->v1->norm.z);
+        glVertex3f(p_tri->v1->position.x, p_tri->v1->position.y, p_tri->v1->position.z);
+
+        glNormal3f(p_tri->v2->norm.x, p_tri->v2->norm.y, p_tri->v2->norm.z);
+        glVertex3f(p_tri->v2->position.x, p_tri->v2->position.y, p_tri->v2->position.z);
+    }
+    glEnd();
+
+//    glDisable(GL_BLEND);
+//    glEnable(GL_DEPTH_TEST);
+}
+
+void MainViewer::drawCars()
+{
+    int size = traffic_system_p->car_particle_list.size();
+    for (int i=0; i<size; ++i)
+    {
+        drawOneCar(traffic_system_p->car_particle_list[i]);
+    }
+}
+
+void MainViewer::drawOneCar(CarParticle *p_car)
+{
+    // Update the position of each node according to the orientation.
+    p_car->carmesh->replicate();
+    p_car->carmesh->rotate(2, atan2(p_car->orientation.y, p_car->orientation.x));
+    p_car->carmesh->computeNormal();
+
+    // Setting Lighting materials
+    glMaterialfv(GL_FRONT, GL_AMBIENT, material_ambient);
+    glMaterialfv(GL_FRONT, GL_DIFFUSE, material_diffuse);
+    glMaterialfv(GL_FRONT, GL_SPECULAR, material_specular);
+    glMaterialfv(GL_FRONT, GL_SHININESS, material_shininess);
+
+    glColor4f(p_car->color.x, p_car->color.y, p_car->color.z, p_car->color.a);
+    glBegin(GL_TRIANGLES);
+    int num_face = p_car->carmesh->triangle_list.size();
+    for (int i=0; i<num_face; ++i)
+    {
+        Triangle *p_tri = &p_car->carmesh->triangle_list[i];
+
+        zVec3 pos = {p_car->position.x, p_car->position.y, 0};
+
+        zVec3 norm = p_tri->norm;
+
+        // determine the new vertices
+        zVec3 n0 = p_tri->v0->position + pos;
+        zVec3 n1 = p_tri->v1->position + pos;
+        zVec3 n2 = p_tri->v2->position + pos;
+
+        glNormal3f(norm.x, norm.y, norm.z);
+        glVertex3f(n0.x, n0.y, n0.z);
+        glVertex3f(n1.x, n1.y, n1.z);
+        glVertex3f(n2.x, n2.y, n2.z);
+
+        glNormal3f(-norm.x, -norm.y, -norm.z);
+        glVertex3f(n0.x, n0.y, n0.z);
+        glVertex3f(n2.x, n2.y, n2.z);
+        glVertex3f(n1.x, n1.y, n1.z);
+    }
+    glEnd();
+
+    // draw bounding box
+    glColor4f(1, 0, 1, 1);
+    glBegin(GL_LINES);
+    glVertex3f(p_car->bbox[0].x, p_car->bbox[0].y, 0.0);
+    glVertex3f(p_car->bbox[1].x, p_car->bbox[1].y, 0.0);
+
+    glVertex3f(p_car->bbox[1].x, p_car->bbox[1].y, 0.0);
+    glVertex3f(p_car->bbox[2].x, p_car->bbox[2].y, 0.0);
+
+    glVertex3f(p_car->bbox[2].x, p_car->bbox[2].y, 0.0);
+    glVertex3f(p_car->bbox[3].x, p_car->bbox[3].y, 0.0);
+
+    glVertex3f(p_car->bbox[3].x, p_car->bbox[3].y, 0.0);
+    glVertex3f(p_car->bbox[0].x, p_car->bbox[0].y, 0.0);
+    glEnd();
+}
+
+void MainViewer::drawBoundaryZone()
+{
+    int size = traffic_system_p->road_shape->road_list.size();
+
+    glLineWidth(2.2);
+    glColor4f(0, 0, 1, 0.8);
+    glBegin(GL_LINES);
+    for (int i=0; i<size; ++i)
+    {
+        Road *p_road = &traffic_system_p->road_shape->road_list[i];
+
+        ZoneElement *p_ele;
+
+        p_ele = &p_road->source;
+        glVertex3f(p_ele->v0.x, p_ele->v0.y, visual_xy_plane_height);
+        glVertex3f(p_ele->v1.x, p_ele->v1.y, visual_xy_plane_height);
+
+        glVertex3f(p_ele->v1.x, p_ele->v1.y, visual_xy_plane_height);
+        glVertex3f(p_ele->v2.x, p_ele->v2.y, visual_xy_plane_height);
+
+        glVertex3f(p_ele->v2.x, p_ele->v2.y, visual_xy_plane_height);
+        glVertex3f(p_ele->v3.x, p_ele->v3.y, visual_xy_plane_height);
+
+        glVertex3f(p_ele->v3.x, p_ele->v3.y, visual_xy_plane_height);
+        glVertex3f(p_ele->v0.x, p_ele->v0.y, visual_xy_plane_height);
+
+        p_ele = &p_road->destination;
+        glVertex3f(p_ele->v0.x, p_ele->v0.y, visual_xy_plane_height);
+        glVertex3f(p_ele->v1.x, p_ele->v1.y, visual_xy_plane_height);
+
+        glVertex3f(p_ele->v1.x, p_ele->v1.y, visual_xy_plane_height);
+        glVertex3f(p_ele->v2.x, p_ele->v2.y, visual_xy_plane_height);
+
+        glVertex3f(p_ele->v2.x, p_ele->v2.y, visual_xy_plane_height);
+        glVertex3f(p_ele->v3.x, p_ele->v3.y, visual_xy_plane_height);
+
+        glVertex3f(p_ele->v3.x, p_ele->v3.y, visual_xy_plane_height);
+        glVertex3f(p_ele->v0.x, p_ele->v0.y, visual_xy_plane_height);
+
+        // The big bounding box
+        glVertex3f(p_road->max_x, p_road->max_y, visual_xy_plane_height);
+        glVertex3f(p_road->min_x, p_road->max_y, visual_xy_plane_height);
+
+        glVertex3f(p_road->min_x, p_road->max_y, visual_xy_plane_height);
+        glVertex3f(p_road->min_x, p_road->min_y, visual_xy_plane_height);
+
+        glVertex3f(p_road->min_x, p_road->min_y, visual_xy_plane_height);
+        glVertex3f(p_road->max_x, p_road->min_y, visual_xy_plane_height);
+
+        glVertex3f(p_road->max_x, p_road->min_y, visual_xy_plane_height);
+        glVertex3f(p_road->max_x, p_road->max_y, visual_xy_plane_height);
+    }
+    glEnd();
+
+    glLineWidth(2.0);
+    glColor4f(1, 0, 0, 0.8);
+    glBegin(GL_LINES);
+    for (int i=0; i<size; ++i)
+    {
+        Road *p_road = &traffic_system_p->road_shape->road_list[i];
+
+        ZoneElement *p_ele;
+
+        int num_zone = p_road->boundary_zone.size();
+        for (int j=0; j<num_zone; ++j)
+        {
+            p_ele = &p_road->boundary_zone[j];
+            glVertex3f(p_ele->v0.x, p_ele->v0.y, visual_xy_plane_height);
+            glVertex3f(p_ele->v1.x, p_ele->v1.y, visual_xy_plane_height);
+
+            glVertex3f(p_ele->v1.x, p_ele->v1.y, visual_xy_plane_height);
+            glVertex3f(p_ele->v2.x, p_ele->v2.y, visual_xy_plane_height);
+
+            glVertex3f(p_ele->v2.x, p_ele->v2.y, visual_xy_plane_height);
+            glVertex3f(p_ele->v3.x, p_ele->v3.y, visual_xy_plane_height);
+
+            glVertex3f(p_ele->v3.x, p_ele->v3.y, visual_xy_plane_height);
+            glVertex3f(p_ele->v0.x, p_ele->v0.y, visual_xy_plane_height);
+        }
+    }
+    glEnd();
+}
+
+void MainViewer::drawArrowFrom(zVec3 origin, zVec3 destination,
+                               double D, zVec4 color_)
+{
+    GLdouble x1 = origin.x;
+    GLdouble y1 = origin.y;
+    GLdouble z1 = origin.z;
+    GLdouble x2 = destination.x;
+    GLdouble y2 = destination.y;
+    GLdouble z2 = destination.z;
+    //GLdouble D  = 0.01;  // the size of the arrow
+
+    double x=x2-x1;
+    double y=y2-y1;
+    double z=z2-z1;
+    double L=sqrt(x*x+y*y+z*z);
+
+    glColor4f(color_.x, color_.y, color_.z, color_.a);
+
+    GLUquadricObj *quadObj;
+
+    glPushMatrix();
+
+    glTranslated((x1+x2)*0.5, (y1+y2)*0.5, (z1+z2)*0.5);
+
+    double RADPERDEG = 0.0174533;
+    if (x != 0.0 || y != 0.0)
+    {
+        glRotated(atan2(y,x)/RADPERDEG, 0., 0., 1.);
+        glRotated(atan2(sqrt(x*x+y*y),z)/RADPERDEG,0.,1.,0.);
+    }
+    else if (z<0)
+    {
+        glRotated(180,1.,0.,0.);
+    }
+
+    // the stick
+    glTranslatef(0,0,-L/2);
+
+    quadObj = gluNewQuadric ();
+    gluQuadricDrawStyle(quadObj, GLU_FILL);
+    gluQuadricNormals(quadObj, GLU_SMOOTH);
+    gluCylinder(quadObj, D, D, L-4*D, 32, 1);
+    gluDeleteQuadric(quadObj);
+
+    quadObj = gluNewQuadric ();
+    gluQuadricDrawStyle(quadObj, GLU_FILL);
+    gluQuadricNormals(quadObj, GLU_SMOOTH);
+    gluQuadricOrientation(quadObj, GLU_INSIDE);
+    gluDisk(quadObj, 0.0, D, 32, 1);
+    gluDeleteQuadric(quadObj);
+
+    // the head
+    glTranslatef(0,0,L-4*D);
+
+    quadObj = gluNewQuadric ();
+    gluQuadricDrawStyle(quadObj, GLU_FILL);
+    gluQuadricNormals(quadObj, GLU_SMOOTH);
+    gluCylinder(quadObj, 2.3*D, 0.0, 4*D, 32, 1);
+    gluDeleteQuadric(quadObj);
+
+    quadObj = gluNewQuadric ();
+    gluQuadricDrawStyle(quadObj, GLU_FILL);
+    gluQuadricNormals(quadObj, GLU_SMOOTH);
+    gluQuadricOrientation(quadObj, GLU_INSIDE);
+    gluDisk(quadObj, 0.0, 2.3*D, 32, 1);
+    gluDeleteQuadric(quadObj);
+
+    glPopMatrix();
+}
+
+void MainViewer::drawSelectionRectangle()
+{
+    startScreenCoordinatesSystem();
+    glDisable(GL_LIGHTING);
+    glEnable(GL_BLEND);
+
+    glColor4f(0.0, 0.0, 0.3f, 0.3f);
+    glBegin(GL_QUADS);
+    glVertex2i(selection_rect.left(),  selection_rect.top());
+    glVertex2i(selection_rect.right(), selection_rect.top());
+    glVertex2i(selection_rect.right(), selection_rect.bottom());
+    glVertex2i(selection_rect.left(),  selection_rect.bottom());
+    glEnd();
+
+    glLineWidth(2.0);
+    glColor4f(0.4f, 0.4f, 0.5f, 0.5f);
+    glBegin(GL_LINE_LOOP);
+    glVertex2i(selection_rect.left(),  selection_rect.top());
+    glVertex2i(selection_rect.right(), selection_rect.top());
+    glVertex2i(selection_rect.right(), selection_rect.bottom());
+    glVertex2i(selection_rect.left(),  selection_rect.bottom());
+    glEnd();
+
+    glDisable(GL_BLEND);
+    glEnable(GL_LIGHTING);
+    stopScreenCoordinatesSystem();
+}
+
+void MainViewer::drawLineOnScreen()
+{
+    startScreenCoordinatesSystem();
+    glDisable(GL_LIGHTING);
+    glEnable(GL_BLEND);
+
+    glLineWidth(2.0);
+    glColor4f(particle_color_selected[0],
+              particle_color_selected[1],
+              particle_color_selected[2],
+              particle_color_selected[3]);
+    glBegin(GL_LINES);
+    glVertex2i(line_on_screen.x1(),  line_on_screen.y1());
+    glVertex2i(line_on_screen.x2(),  line_on_screen.y2());
+    glEnd();
+
+    glDisable(GL_BLEND);
+    glEnable(GL_LIGHTING);
+    stopScreenCoordinatesSystem();
+}
+
+void MainViewer::drawBlockLine()
+{
+    glLineWidth(5.0);
+    glColor4f(color_spline.x, color_spline.y, color_spline.z, color_spline.a);
+    glBegin(GL_LINES);
+    int size = block_points.size()-1;
+    for (int i=0; i<size; ++i)
+    {
+        glVertex3f(block_points[i].x, block_points[i].y, visual_xy_plane_height);
+        glVertex3f(block_points[i+1].x, block_points[i+1].y, visual_xy_plane_height);
+    }
+    if (size >= 0)
+    {
+        glColor4f(1, 0, 0, 0.5);
+        glVertex3f(block_points[size].x, block_points[size].y, visual_xy_plane_height);
+        glVertex3f(block_point_active.x, block_point_active.y, visual_xy_plane_height);
+    }
+    glEnd();
+}
+
+void MainViewer::drawBezierSpline()
+{
+    // draw the spline using the curve points
+    glLineWidth(5.0);
+    glColor4f(color_spline.x, color_spline.y, color_spline.z, color_spline.a);
+    glBegin(GL_LINES);
+    int size = road_curve_array.size();
+    for (int i=0; i<size; ++i)
+    {
+        // get the road curve
+        BezierCurve *p_road_curve = &road_curve_array[i];
+
+        int size_bezier = p_road_curve->bezier_array.size();
+        for (int j=0; j<size_bezier; ++j)
+        {
+            // get the curve point array
+            PointArray *p_curve_point = &(p_road_curve->bezier_array[j].line_t_point);
+
+            int size_point = p_curve_point->size() - 1;
+            for (int k=0; k<size_point; ++k)
+            {
+                glVertex3f(p_curve_point->at(k).x, p_curve_point->at(k).y, visual_xy_plane_height);
+                glVertex3f(p_curve_point->at(k+1).x, p_curve_point->at(k+1).y, visual_xy_plane_height);
+            }
+        }
+    }
+    glEnd();
+
+    // draw the control points and connecting lines
+    glLineWidth(2.0);
+    int count = 0;
+    for (int i=0; i<size; ++i)
+    {
+        // get the road curve
+        BezierCurve *p_road_curve = &road_curve_array[i];
+
+        // get the control point array
+        PointArray *p_control_point = &p_road_curve->control_point_triple;
+        int size_point = p_control_point->size();
+
+        // do not draw the dummy points
+        int dummy_idx_1 = 2, dummy_idx_2 = size_point - 2;
+
+        // draw the control points
+        for (int k=0; k<size_point; ++k)
+        {
+            if (k != dummy_idx_1 && k != dummy_idx_2)
+            {
+                if (count == selectedName())
+                {
+                    drawOneQuad(p_control_point->at(k), color_selected);
+                }
+                else
+                {
+                    drawOneQuad(p_control_point->at(k), color_spline);
+                }
+            }
+
+            count++;
+        }
+
+        // draw the connecting lines
+        glColor4f(color_spline.x, color_spline.y, color_spline.z, color_spline.a);
+        glBegin(GL_LINES);
+        glVertex3f(p_control_point->at(0).x, p_control_point->at(0).y, visual_xy_plane_height);
+        glVertex3f(p_control_point->at(1).x, p_control_point->at(1).y, visual_xy_plane_height);
+        glVertex3f(p_control_point->at(size_point-3).x, p_control_point->at(size_point-3).y, visual_xy_plane_height);
+        glVertex3f(p_control_point->at(size_point-1).x, p_control_point->at(size_point-1).y, visual_xy_plane_height);
+
+        size_point -= 3;
+        for (int k=3; k<size_point; k += 3)
+        {
+            zVec2 p0 = p_control_point->at(k);
+            zVec2 p1 = p_control_point->at(k+1);
+            zVec2 p2 = p_control_point->at(k+2);
+
+            glVertex3f(p0.x, p0.y, visual_xy_plane_height);
+            glVertex3f(p1.x, p1.y, visual_xy_plane_height);
+            glVertex3f(p0.x, p0.y, visual_xy_plane_height);
+            glVertex3f(p2.x, p2.y, visual_xy_plane_height);
+        }
+        glEnd();
+    }
+}
+
+void MainViewer::drawOneQuad(zVec2 &pos, zVec4 color)
+{
+    glColor4f(color.x, color.y, color.z, color.a);
+
+    GLfloat hd = 0.1; // the half dimension of the cube.+
+    GLfloat n0[3], n1[3], n2[3], n3[3];
+
+    n0[0] = pos.x - hd;
+    n0[1] = pos.y - hd;
+    n0[2] = visual_xy_plane_height;
+
+    n1[0] = pos.x + hd;
+    n1[1] = pos.y - hd;
+    n1[2] = visual_xy_plane_height;
+
+    n2[0] = pos.x + hd;
+    n2[1] = pos.y + hd;
+    n2[2] = visual_xy_plane_height;
+
+    n3[0] = pos.x - hd;
+    n3[1] = pos.y + hd;
+    n3[2] = visual_xy_plane_height;
+
+    glBegin(GL_QUADS);
+    {
+        //glNormal3f(0, 0, -1);
+        glVertex3fv(n0);
+        glVertex3fv(n3);
+        glVertex3fv(n2);
+        glVertex3fv(n1);
+
+        //glNormal3f(0, 0, 1);
+        glVertex3fv(n0);
+        glVertex3fv(n1);
+        glVertex3fv(n2);
+        glVertex3fv(n3);
+    }
+    glEnd();
+}
+
+void MainViewer::drawOneCube(zVec2 &pos, zVec4 color)
+{
+    glColor4f(color.x, color.y, color.z, color.a);
+
+    // Setting Lighting materials
+    glMaterialfv(GL_FRONT, GL_AMBIENT, material_ambient);
+    glMaterialfv(GL_FRONT, GL_DIFFUSE, material_diffuse);
+    glMaterialfv(GL_FRONT, GL_SPECULAR, material_specular);
+    glMaterialfv(GL_FRONT, GL_SHININESS, material_shininess);
+
+    GLfloat hd = 0.05; // the half dimension of the cube.+
+    GLfloat n0[3], n1[3], n2[3], n3[3];
+    GLfloat n4[3], n5[3], n6[3], n7[3];
+
+    n0[0] = pos.x - hd;
+    n0[1] = pos.y - hd;
+    n0[2] = - hd;
+
+    n1[0] = pos.x + hd;
+    n1[1] = pos.y - hd;
+    n1[2] = - hd;
+
+    n2[0] = pos.x + hd;
+    n2[1] = pos.y + hd;
+    n2[2] = - hd;
+
+    n3[0] = pos.x - hd;
+    n3[1] = pos.y + hd;
+    n3[2] = - hd;
+
+    n4[0] = pos.x - hd;
+    n4[1] = pos.y - hd;
+    n4[2] = hd;
+
+    n5[0] = pos.x + hd;
+    n5[1] = pos.y - hd;
+    n5[2] = hd;
+
+    n6[0] = pos.x + hd;
+    n6[1] = pos.y + hd;
+    n6[2] = hd;
+
+    n7[0] = pos.x - hd;
+    n7[1] = pos.y + hd;
+    n7[2] = hd;
+
+    glBegin(GL_QUADS);
+    {
+        glNormal3f(0, 0, -1);
+        glVertex3fv(n0);
+        glVertex3fv(n3);
+        glVertex3fv(n2);
+        glVertex3fv(n1);
+
+        glNormal3f(0, -1, 0);
+        glVertex3fv(n0);
+        glVertex3fv(n1);
+        glVertex3fv(n5);
+        glVertex3fv(n4);
+
+        glNormal3f(-1, 0, 0);
+        glVertex3fv(n0);
+        glVertex3fv(n4);
+        glVertex3fv(n7);
+        glVertex3fv(n3);
+
+        glNormal3f(0, 1, 0);
+        glVertex3fv(n7);
+        glVertex3fv(n6);
+        glVertex3fv(n2);
+        glVertex3fv(n3);
+
+        glNormal3f(1, 0, 0);
+        glVertex3fv(n6);
+        glVertex3fv(n5);
+        glVertex3fv(n1);
+        glVertex3fv(n2);
+
+        glNormal3f(0, 0, 1);
+        glVertex3fv(n4);
+        glVertex3fv(n5);
+        glVertex3fv(n6);
+        glVertex3fv(n7);
+    }
+    glEnd();
+}
+
+//============================================================================
+// Associatie Functions
+//============================================================================
+bool MainViewer::splitBezier(zVec2 p)
+{
+    // first determine which line point the given point is closest to.
+    double min_distance = 100000;
+    int idx_i = -1;  // the index to the curve
+    int idx_j = -1;  // the index to the bezier in the curve
+    int idx_k = -1;  // the index to curve point in the bezier
+    zVec2 closest_p;
+
+    int size = road_curve_array.size();
+    for (int i=0; i<size; ++i)
+    {
+        // get the road curve
+        BezierCurve *p_road_curve = &road_curve_array[i];
+
+        int size_bezier = p_road_curve->bezier_array.size();
+        for (int j=0; j<size_bezier; ++j)
+        {
+            // get the curve point array
+            PointArray *p_curve_point = &(p_road_curve->bezier_array[j].line_t_point);
+
+            int size_point = p_curve_point->size();
+            for (int k=0; k<size_point; ++k)
+            {
+                zVec2 middle_p = p_curve_point->at(k);
+                zVec2 v = middle_p - p;
+                double dd = v.x*v.x + v.y*v.y;
+                if (dd < min_distance)
+                {
+                    min_distance = dd;
+                    idx_i = i;
+                    idx_j = j;
+                    idx_k = k;
+                    closest_p = middle_p;
+                }
+            }
+        }
+    }
+
+    // the point is close enough to the spline, split it
+    if (min_distance <= 0.01)
+    {
+        // determine the corresponding bezier and parameter
+        // get the road curve
+        BezierCurve *p_road_curve = &road_curve_array[idx_i];
+        BezierElement b_ele = p_road_curve->bezier_array[idx_j];
+
+        double t = b_ele.line_t[idx_k];
+        t = Bezier::getClosestParameter(t, p, b_ele.control_point);
+
+        // this bezier will be splited to two beziers using De Casteljau algorithm
+        // add a space to the bezier array
+        p_road_curve->bezier_array.push_back(b_ele);
+
+        size = p_road_curve->bezier_array.size();
+        for (int i=size-1; i>idx_j; --i)
+        {
+            p_road_curve->bezier_array[i] = p_road_curve->bezier_array[i-1];
+        }
+
+        Bezier::splitByDeCasteljau(p_road_curve->bezier_array[idx_j].control_point,
+                                   p_road_curve->bezier_array[idx_j+1].control_point,
+                                   t, p_road_curve->bezier_array[idx_j].control_point);
+
+        // must update the whole curve since the control points triple changed
+        p_road_curve->update();
+
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}
+
+void MainViewer::updateSpline()
+{
+    int size = traffic_system_p->road_shape->road_list.size();
+    for (int i=0; i<size; ++i)
+    {
+        traffic_system_p->road_shape->road_list[i].road_curve = road_curve_array[i];
+    }
+    traffic_system_p->road_shape->buildRoad();
+
+    traffic_system_p->initSystem();
+}
+
+void MainViewer::restoreSpline()
+{
+    road_curve_array.clear();
+
+    int size = traffic_system_p->road_shape->road_list.size();
+    for (int i=0; i<size; ++i)
+    {
+        road_curve_array.push_back(traffic_system_p->road_shape->road_list[i].road_curve);
+        road_curve_array[i].update();
+    }
+}
+
+void MainViewer::stepObservation()
+{
+
+}
+void MainViewer::updateBlockLine()
+{
+
+}
+void MainViewer::restoreBlockLine()
+{
+
+}
+
+bool MainViewer::isNearCamera()
+{
+    //double cx = camera()->position().x;
+    double cy = camera()->position().y;
+    double cz = camera()->position().z;
+
+    if (cy*cy + cz*cz <= 100)
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
+}

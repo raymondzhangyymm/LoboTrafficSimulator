@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="Yuming Zhang">
+ <bounds minlat="-78" minlon="-32" maxlat="62" maxlon="77" isPosition="true"/>
+ <node id="0" timestamp="2007-10-16T02:01:40Z" lon="4.25115" lat="-77.0193" isPosition="true"/>
+ <node id="1" timestamp="2007-10-16T02:01:40Z" lon="2.07168" lat="-23.2509" isPosition="true"/>
+ <node id="2" timestamp="2007-10-16T02:01:40Z" lon="39.3945" lat="-8.37761" isPosition="true"/>
+ <node id="3" timestamp="2007-10-16T02:01:40Z" lon="16.1893" lat="61.2514 " isPosition="true"/>
+
+ <node id="10" timestamp="2007-10-16T02:01:40Z" lon="-31.1457" lat="15.7894" isPosition="true"/>
+ <node id="11" timestamp="2007-10-16T02:01:40Z" lon="-15.2301" lat="19.4163" isPosition="true"/>
+ <node id="12" timestamp="2007-10-16T02:01:40Z" lon="51.0444" lat="32.5475" isPosition="true"/>
+ <node id="13" timestamp="2007-10-16T02:01:40Z" lon="76.5676" lat="51.1405" isPosition="true"/>
+
+ <node id="14" timestamp="2007-10-16T02:01:40Z" lon="-31.8632" lat="-34.0712" isPosition="true"/>
+ <node id="15" timestamp="2007-10-16T02:01:40Z" lon="30.6096" lat="-19.1405" isPosition="true"/>
+ <node id="16" timestamp="2007-10-16T02:01:40Z" lon="34.0316" lat="-43.9147" isPosition="true"/>
+ <node id="17" timestamp="2007-10-16T02:01:40Z" lon="65.4398" lat="-54.0331" isPosition="true"/>
+
+ <way id="0" timestamp="2007-10-16T02:01:40Z">
+  <nd ref="0"/>
+  <nd ref="1"/>
+  <nd ref="2"/>
+  <nd ref="3"/>
+  <tag k="beziers" v="yes"/>
+  <tag k="oneway" v="yes"/>
+  <tag k="scaling" v="1"/>
+  <tag k="lanes" v="4"/>
+ </way>
+
+ <way id="1" timestamp="2007-10-16T02:01:40Z">
+  <nd ref="10"/>
+  <nd ref="11"/>
+  <nd ref="12"/>
+  <nd ref="13"/>
+  <tag k="beziers" v="yes"/>
+  <tag k="oneway" v="yes"/>
+  <tag k="scaling" v="1"/>
+  <tag k="lanes" v="2"/>
+ </way>
+
+ <way id="2" timestamp="2007-10-16T02:01:40Z">
+  <nd ref="14"/>
+  <nd ref="15"/>
+  <nd ref="16"/>
+  <nd ref="17"/>
+  <tag k="beziers" v="yes"/>
+  <tag k="oneway" v="yes"/>
+  <tag k="scaling" v="1"/>
+  <tag k="lanes" v="3"/>
+ </way>
+</osm>

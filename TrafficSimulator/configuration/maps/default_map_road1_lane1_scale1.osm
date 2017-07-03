@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<osm version="0.6" generator="Yuming Zhang">
+ <bounds minlat="0" minlon="0" maxlat="0.0019" maxlon="0.0019"/>
+ <node id="0" timestamp="2007-10-16T02:01:40Z" lon="0.000100678394081270" lat="0.00113489824088781">
+  <tag k="nodetype" v="makeup"/>
+ </node>
+ <node id="1" timestamp="2007-10-16T02:01:40Z" lon="0.000514945495918097" lat="0.00134646095071537">
+  <tag k="nodetype" v="makeup"/>
+ </node>
+ <node id="2" timestamp="2007-10-16T02:01:40Z" lon="0.000378037271241059" lat="0.000803317465463968">
+  <tag k="nodetype" v="makeup"/>
+ </node>
+ <node id="3" timestamp="2007-10-16T02:01:40Z" lon="0.000687373326742501" lat="0.000829915801280620">
+  <tag k="nodetype" v="makeup"/>
+ </node>
+ <node id="4" timestamp="2007-10-16T02:01:40Z" lon="0.00120730711998836" lat="0.000874622876954052">
+  <tag k="nodetype" v="makeup"/>
+ </node>
+ <node id="5" timestamp="2007-10-16T02:01:40Z" lon="0.000930381895706941" lat="0.00129035047707889">
+  <tag k="nodetype" v="makeup"/>
+ </node>
+ <node id="6" timestamp="2007-10-16T02:01:40Z" lon="0.00120174481585575" lat="0.00137252778746293">
+  <tag k="nodetype" v="makeup"/>
+ </node>
+ <node id="7" timestamp="2007-10-16T02:01:40Z" lon="0.00155489402135434" lat="0.00147947061623075">
+  <tag k="nodetype" v="makeup"/>
+ </node>
+ <node id="8" timestamp="2007-10-16T02:01:40Z" lon="0.00159599122010161" lat="0.00109505829374561">
+  <tag k="nodetype" v="makeup"/>
+ </node>
+ <node id="9" timestamp="2007-10-16T02:01:40Z" lon="0.00188925280121886" lat="0.00117561952320381">
+  <tag k="nodetype" v="makeup"/>
+ </node>
+ <way id="0" timestamp="2007-10-16T02:01:40Z">
+  <nd ref="0"/>
+  <nd ref="1"/>
+  <nd ref="2"/>
+  <nd ref="3"/>
+  <nd ref="3"/>
+  <nd ref="4"/>
+  <nd ref="5"/>
+  <nd ref="6"/>
+  <nd ref="6"/>
+  <nd ref="7"/>
+  <nd ref="8"/>
+  <nd ref="9"/>
+  <tag k="beziers" v="yes"/>
+  <tag k="oneway" v="yes"/>
+  <tag k="scaling" v="1"/>
+  <tag k="lanes" v="1"/>
+ </way>
+</osm>

@@ -1,0 +1,243 @@
+#ifndef GLOBAL
+#define GLOBAL
+
+#include "glm.hpp"
+#include "GL/gl.h"
+//#include "Core"
+//#include "Eigen"
+#include "Eigen/Sparse"
+#include <map>
+#include <vector>
+#include <list>
+#include <iostream>
+#include <fstream>
+#include <time.h>
+
+#define PI 3.14159265
+#define HASH_FUNCTION_PRIME_1 73856093
+#define HASH_FUNCTION_PRIME_2 19349663
+#define HASH_FUNCTION_PRIME_3 83492791
+
+#define GRAVITY_DEFAULT_MAGNITUDE		-9.8
+#define PARTICLE_MASS_DEFAULT_VALUE		 0.1
+#define INITIAL_SPACE_BETWEEN_PARTICLES  0.5
+
+#define FRAME_RATE 15
+
+#define YOUNG_MODULUS 1000.0
+#define POISSON_RATIO 0.4
+
+#define COLOR_RED    {1.0,0.0,0.0}
+#define COLOR_GREEN  {0.0,1.0,0.0}
+#define COLOR_BLUE   {0.0,0.0,1.0}
+
+using namespace std;
+using namespace Eigen;
+
+//My vector class definition
+class zVec2
+{
+public:
+
+    // constructors
+    zVec2()
+    {
+        x = 0; y = 0;
+    }
+    zVec2(double xx, double yy)
+    {
+        x = xx; y = yy;
+    }
+
+    // components
+    double x, y;
+
+    // member functions
+    // output values
+    inline friend std::ostream &operator<<(std::ostream &os, const zVec2 &v)
+    {
+        os << '(' << v.x << ',' << v.y << ')';
+        return os;
+    }
+
+    // set to zeros
+    inline void clear(void)
+    {
+        x = 0; y = 0;
+    }
+
+    // length
+    inline double length(void)
+    {
+        return sqrt(x*x + y*y);
+    }
+
+    // inner product
+    inline double dotproduct(const zVec2 &v)
+    {
+        return x*v.x + y*v.y;
+    }
+
+    // get individule components
+    inline double &operator[](const int &idx)
+    {
+        if (idx == 0)
+            return x;
+        else if (idx == 1)
+            return y;
+        else
+            assert("zVec2[] Access error!");
+    }
+
+    // assignment
+    inline zVec2 &operator=(const zVec2 &v)
+    {
+        x = v.x; y = v.y;
+        return *this;
+    }
+//    inline zVec3 &operator=(const double &d1, const double &d2, const double &d3)
+//    {
+//        x = d1; y = d2; z = d3;
+//        return *this;
+//    }
+
+    // vector addition
+    inline zVec2 operator+(const zVec2 &v)
+    {
+        return zVec2(x+v.x, y+v.y);
+    }
+    inline zVec2 &operator+=(const zVec2 &v)
+    {
+        x += v.x; y += v.y;
+        return *this;
+    }
+
+    // substraction
+    inline zVec2 operator-(const zVec2 &v)
+    {
+        return zVec2(x-v.x, y-v.y);
+    }
+    inline zVec2 &operator-=(const zVec2 &v)
+    {
+        x -= v.x; y -= v.y;
+        return *this;
+    }
+
+    // mulplication
+    inline zVec2 operator*(float scalar)
+    {
+        return zVec2(x*scalar, y*scalar);
+    }
+
+    // division
+    inline zVec2 operator/(float scalar)
+    {
+        return zVec2(x/scalar, y/scalar);
+    }
+};
+
+class zVec3
+{
+public:
+
+    // constructors
+    zVec3()
+    {
+        x = 0; y = 0; z = 0;
+    }
+    zVec3(double xx, double yy, double zz)
+    {
+        x = xx; y = yy; z = zz;
+    }
+
+    // components
+    double x, y, z;
+
+    // member functions
+    // output values
+    inline friend std::ostream &operator<<(std::ostream &os, const zVec3 &v)
+    {
+        os << '(' << v.x << ',' << v.y << ',' << v.z << ')';
+        return os;
+    }
+
+    // set to zeros
+    inline void clear(void)
+    {
+        x = 0; y = 0; z = 0;
+    }
+
+    // length
+    inline double length(void)
+    {
+        return sqrt(x*x + y*y + z*z);
+    }
+
+    // inner product
+    inline double dotproduct(const zVec3 &v1, const zVec3 &v2)
+    {
+        return v1.x*v2.x + v1.y*v2.y + v1.z*v2.z;
+    }
+
+    // get individule components
+    inline double &operator[](const int &idx)
+    {
+        if (idx == 0)
+            return x;
+        else if (idx == 1)
+            return y;
+        else if (idx == 2)
+            return z;
+        else
+            assert("zVec3[] Access error!");
+    }
+
+    // assignment
+    inline zVec3 &operator=(const zVec3 &v)
+    {
+        x = v.x; y = v.y; z = v.z;
+        return *this;
+    }
+//    inline zVec3 &operator=(const double &d1, const double &d2, const double &d3)
+//    {
+//        x = d1; y = d2; z = d3;
+//        return *this;
+//    }
+
+    // vector addition
+    inline zVec3 operator+(const zVec3 &v)
+    {
+        return zVec3(x+v.x, y+v.y, z+v.z);
+    }
+    inline zVec3 &operator+=(const zVec3 &v)
+    {
+        x += v.x; y += v.y; z += v.z;
+        return *this;
+    }
+
+    // substraction
+    inline zVec3 operator-(const zVec3 &v)
+    {
+        return zVec3(x-v.x, y-v.y, z-v.z);
+    }
+    inline zVec3 &operator-=(const zVec3 &v)
+    {
+        x -= v.x; y -= v.y; z -= v.z;
+        return *this;
+    }
+
+    // mulplication
+    inline zVec3 operator*(float scalar)
+    {
+        return zVec3(x*scalar, y*scalar, z*scalar);
+    }
+
+    // division
+    inline zVec3 operator/(float scalar)
+    {
+        return zVec3(x/scalar, y/scalar, z/scalar);
+    }
+};
+
+#endif // GLOBAL
+

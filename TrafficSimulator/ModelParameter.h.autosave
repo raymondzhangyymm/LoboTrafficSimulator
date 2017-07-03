@@ -1,0 +1,59 @@
+#ifndef ModelParameter_H
+#define ModelParameter_H
+
+#include <global.h>
+
+class ModelParameter
+{
+public:
+
+    ModelParameter();
+
+    // The mass of each particle of the fluid in Kg.
+    double particleMass;
+
+    // The size of each particle.
+    double particleRadius;
+
+    // The support radius for the kernels in m.
+    double supportRadius;
+
+    // The density of the fluid in rest in Kg/m^3.
+	double restDensity;
+
+    // The gass stiffness constant of the fluid in J.
+    double GasStiffness;
+
+    // The viscosity coeficient of the fluid in Pa * s.
+    double Viscocity;
+
+    // The surface tension coeficient of the fluid in N / m.
+	double surfaceTensionCoef;
+
+    // The threshold used to calculate the surface tension for the particles.
+	double surfaceThreshold;
+
+    // The delta time for the fluid simulation.
+	double deltaTime;
+
+    // The volumne of the fluid.
+	double fluidVolume;
+
+    // The damping of the fluid.
+    double damping;
+
+    // The speed limit for the vehicles.
+    double field_force;
+
+    // The rate of producing new particles.
+    double productionRate;
+
+    // The type of the kernel.
+    int kernelType;
+    
+private:
+    // The default interactive setting parameters
+    
+};
+
+#endif
